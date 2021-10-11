@@ -1,8 +1,5 @@
-package com.github.rerorero.kafka.jsonpath;
+package io.github.rerorero.kafka.jsonpath;
 
-import org.apache.kafka.connect.data.Schema;
-import org.apache.kafka.connect.data.SchemaBuilder;
-import org.apache.kafka.connect.data.Struct;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -13,45 +10,33 @@ import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-class StructAccessorTest {
-    static Schema SCHEMA;
-    static Schema SUB_STRUCT_SCHEMA;
-    static Schema ARRAY_ELEMENT_SCHEMA;
+class MapAccessorTest {
 
-    static {
-        ARRAY_ELEMENT_SCHEMA = SchemaBuilder.struct()
-                .field("string_element", Schema.STRING_SCHEMA)
-                .field("optional_string_element", Schema.OPTIONAL_STRING_SCHEMA)
-                .build();
-        SUB_STRUCT_SCHEMA = SchemaBuilder.struct()
-                .field("sub_text", Schema.STRING_SCHEMA)
-                .field("struct_array", SchemaBuilder.array(ARRAY_ELEMENT_SCHEMA))
-                .field("string_array", SchemaBuilder.array(Schema.STRING_SCHEMA))
-                .build();
-        SCHEMA = SchemaBuilder.struct()
-                .field("text", Schema.STRING_SCHEMA)
-                .field("binary", Schema.OPTIONAL_BYTES_SCHEMA)
-                .field("struct", SUB_STRUCT_SCHEMA)
-                .field("optional_struct", SchemaBuilder.struct().optional()
-                        .field("elem", Schema.STRING_SCHEMA).build())
-                .build();
+    private static Map<String, Object> newMap() {
+        HashMap<String, Object> struct = new HashMap<>();
+        struct.put("sub_text", "original_sub_text");
+        struct.put("struct_array", Arrays.asList(
+                new HashMap<String, Object>() {{
+                    put("string_element", "original_element0");
+                }},
+                new HashMap<String, Object>() {{
+                    put("string_element", "original_element1");
+                }},
+                new HashMap<String, Object>() {{
+                    put("string_element", "original_element2");
+                }}
+        ));
+        struct.put("string_array", Arrays.asList(
+                "original_string_array0",
+                "original_string_array1",
+                "original_string_array2"));
 
+        Map<String, Object> m = new HashMap<>();
+        m.put("text", "original_text");
+        m.put("struct", struct);
+        return m;
     }
 
-    private static Struct newStruct() {
-        return new Struct(SCHEMA)
-                .put("text", "original_text")
-                .put("struct", new Struct(SUB_STRUCT_SCHEMA)
-                        .put("sub_text", "original_sub_text")
-                        .put("struct_array", Arrays.asList(
-                                new Struct(ARRAY_ELEMENT_SCHEMA).put("string_element", "original_element0"),
-                                new Struct(ARRAY_ELEMENT_SCHEMA).put("string_element", "original_element1"),
-                                new Struct(ARRAY_ELEMENT_SCHEMA).put("string_element", "original_element2")))
-                        .put("string_array", Arrays.asList(
-                                "original_string_array0",
-                                "original_string_array1",
-                                "original_string_array2")));
-    }
 
     private static Stream<Arguments> testGetTaskArguments() {
         return Stream.of(
@@ -106,10 +91,10 @@ class StructAccessorTest {
     @ParameterizedTest
     @MethodSource("testGetTaskArguments")
     public void testGetTask(String jsonPath, Map<String, Object> expected) {
-        StructAccessor.Getter getter = new StructAccessor.Getter(jsonPath);
-        Map<String, Object> actual = getter.run(newStruct());
+        MapAccessor.Getter getter = new MapAccessor.Getter(jsonPath);
+        Map<String, Object> actual = getter.run(newMap());
         assertEquals(expected, actual);
-        assertEquals(expected, getter.run(newStruct())); // Getter should be idempotent
+        assertEquals(expected, getter.run(newMap())); // Getter should be idempotent
     }
 
     @Test
@@ -117,49 +102,59 @@ class StructAccessorTest {
         Map<String, Object> expected = new HashMap<String, Object>() {{
             put("$.binary", new byte[]{0x10, 0x20, 0x30});
         }};
-        Struct s = newStruct();
+        Map<String, Object> s = newMap();
         s.put("binary", new byte[]{0x10, 0x20, 0x30});
-        Map<String, Object> actual = new StructAccessor.Getter("$.binary").run(s);
+        Map<String, Object> actual = new MapAccessor.Getter("$.binary").run(s);
         assertEquals(expected.keySet(), actual.keySet());
         assertArrayEquals((byte[]) expected.get("$.binary"), (byte[]) actual.get("$.binary"));
     }
 
     @Test
     public void testGetTaskFailure() {
-        Struct s = newStruct();
-        assertThrows(JsonPathException.class, () -> new StructAccessor.Getter("foo.foo.foo")); // parse error
-        assertThrows(JsonPathException.class, () -> new StructAccessor.Getter("$foo")); // parse error
-        assertThrows(JsonPathException.class, () -> new StructAccessor.Getter("$.struct[0]").run(s));
+        Map<String, Object> s = newMap();
+        assertThrows(JsonPathException.class, () -> new MapAccessor.Getter("foo.foo.foo")); // parse error
+        assertThrows(JsonPathException.class, () -> new MapAccessor.Getter("$foo")); // parse error
+        assertThrows(JsonPathException.class, () -> new MapAccessor.Getter("$.struct[0]").run(s));
+        assertThrows(JsonPathException.class, () -> new MapAccessor.Getter("$.struct.string_array.foo").run(s));
     }
 
     private static Stream<Arguments> testUpdateTaskArguments() {
         List<Arguments> args = new ArrayList<>();
 
-        args.add(Arguments.of("$.text", new HashMap<String, Object>() {{
-            put("$.text", "updated!");
-        }}, newStruct().put("text", "updated!")));
-
-        args.add(Arguments.of("$['text']", new HashMap<String, Object>() {{
-            put("$.text", "updated!");
-        }}, newStruct().put("text", "updated!")));
+        {
+            Map<String, Object> expected = newMap();
+            expected.put("text", "updated!");
+            args.add(Arguments.of("$.text", new HashMap<String, Object>() {{
+                put("$.text", "updated!");
+            }}, expected));
+        }
+        {
+            Map<String, Object> expected = newMap();
+            expected.put("text", "updated!");
+            args.add(Arguments.of("$['text']", new HashMap<String, Object>() {{
+                put("$.text", "updated!");
+            }}, expected));
+        }
 
         {
-            Struct expected = newStruct();
-            expected.getStruct("struct").put("sub_text", "updated!");
+            Map<String, Object> expected = newMap();
+            ((Map<String, Object>) expected.get("struct")).put("sub_text", "updated!");
             args.add(Arguments.of("$.struct.sub_text", new HashMap<String, Object>() {{
                 put("$.struct.sub_text", "updated!");
             }}, expected));
         }
         {
-            Struct expected = newStruct();
-            expected.getStruct("struct").getArray("string_array").set(1, "updated!");
+            Map<String, Object> expected = newMap();
+            Map<String, Object> struct = (Map<String, Object>) expected.get("struct");
+            ((List<String>) struct.get("string_array")).set(1, "updated!");
             args.add(Arguments.of("$['struct']['string_array'][1]", new HashMap<String, Object>() {{
                 put("$.struct.string_array[1]", "updated!");
             }}, expected));
         }
         {
-            Struct expected = newStruct();
-            List<String> arr = expected.getStruct("struct").getArray("string_array");
+            Map<String, Object> expected = newMap();
+            Map<String, Object> struct = (Map<String, Object>) expected.get("struct");
+            List<String> arr = (List<String>) struct.get("string_array");
             arr.set(0, "updated!0");
             arr.set(1, "updated!1");
             arr.set(2, "updated!2");
@@ -170,15 +165,18 @@ class StructAccessorTest {
             }}, expected));
         }
         {
-            Struct expected = newStruct();
-            ((Struct) expected.getStruct("struct").getArray("struct_array").get(2)).put("string_element", "updated!");
+            Map<String, Object> expected = newMap();
+            Map<String, Object> struct = (Map<String, Object>) expected.get("struct");
+            List<Map<String, Object>> arr = (List<Map<String, Object>>) struct.get("struct_array");
+            arr.get(2).put("string_element", "updated!");
             args.add(Arguments.of("$.struct.struct_array[2].string_element", new HashMap<String, Object>() {{
                 put("$.struct.struct_array[2].string_element", "updated!");
             }}, expected));
         }
         {
-            Struct expected = newStruct();
-            List<Struct> arr = expected.getStruct("struct").getArray("struct_array");
+            Map<String, Object> expected = newMap();
+            Map<String, Object> struct = (Map<String, Object>) expected.get("struct");
+            List<Map<String, Object>> arr = (List<Map<String, Object>>) struct.get("struct_array");
             arr.get(0).put("string_element", "updated!0");
             arr.get(1).put("string_element", "updated!1");
             arr.get(2).put("string_element", "updated!2");
@@ -189,45 +187,47 @@ class StructAccessorTest {
             }}, expected));
         }
 
-        args.add(Arguments.of("$.struct.struct_array[0].optional_string_element", new HashMap<String, Object>(), newStruct()));
+        args.add(Arguments.of("$.struct.struct_array[0].optional_string_element", new HashMap<String, Object>(), newMap()));
 
-        args.add(Arguments.of("$.optional_struct.elem", new HashMap<String, Object>(), newStruct()));
+        args.add(Arguments.of("$.optional_struct.elem", new HashMap<String, Object>(), newMap()));
 
-        // missing field should be skipped without error.
-        args.add(Arguments.of("$.unknown", new HashMap<String, Object>(), newStruct()));
-        args.add(Arguments.of("$.struct['unknown'].foo", new HashMap<String, Object>(), newStruct()));
+        // missing field should be pass
+        args.add(Arguments.of("$.unknown", new HashMap<String, Object>(), newMap()));
+        args.add(Arguments.of("$.struct['unknown'].foo", new HashMap<String, Object>(), newMap()));
 
         return Stream.of(args.toArray(args.toArray(new Arguments[0])));
     }
 
     @ParameterizedTest
     @MethodSource("testUpdateTaskArguments")
-    public void testUpdateTask(String jsonPath, Map<String, Object> newValue, Struct expected) {
-        Struct org = newStruct();
-        StructAccessor.Updater updater = new StructAccessor.Updater(jsonPath);
-        Struct actual = updater.run(org, newValue);
+    public void testUpdateTask(String jsonPath, Map<String, Object> newValue, Map<String, Object> expected) {
+        Map<String, Object> org = newMap();
+        MapAccessor.Updater updater = new MapAccessor.Updater(jsonPath);
+        Map<String, Object> actual = updater.run(org, newValue);
         assertEquals(expected, actual);
-        assertEquals(org, newStruct()); // source struct should not be modified
+        assertEquals(org, newMap()); // source struct should not be modified
 
         assertEquals(expected, updater.run(org, newValue)); // Updater should be idempotent
     }
 
     @Test
     public void testUpdateTaskBinary() {
-        Struct expected = newStruct();
+        Map<String, Object> expected = newMap();
         expected.put("binary", new byte[]{0x40, 0x50, 0x60});
-        Struct org = newStruct();
+        Map<String, Object> org = newMap();
         org.put("binary", new byte[]{0x10, 0x20, 0x30});
-        Struct actual = new StructAccessor.Updater("$.binary").run(org, Collections.singletonMap("$.binary", new byte[]{0x40, 0x50, 0x60}));
-        assertEquals(expected, actual);
+        Map<String, Object> actual = new MapAccessor.Updater("$.binary").run(org, Collections.singletonMap("$.binary", new byte[]{0x40, 0x50, 0x60}));
+
+        assertEquals(expected.keySet(), actual.keySet());
+        assertArrayEquals((byte[]) expected.get("binary"), (byte[]) actual.get("binary"));
     }
 
     @Test
     public void testUpdateTaskFailure() {
-        Struct s = newStruct();
-        assertThrows(JsonPathException.class, () -> new StructAccessor.Updater("foo.foo.foo")); // parse error
-        assertThrows(JsonPathException.class, () -> new StructAccessor.Updater("$foo")); // parse error
-        assertThrows(JsonPathException.class, () -> new StructAccessor.Updater("$.struct[0]").run(s, Collections.singletonMap("$.struct[0]", "foo")));
-        assertThrows(JsonPathException.class, () -> new StructAccessor.Updater("$.struct.string_array.foo").run(s, Collections.singletonMap("$.struct.string_array.foo", "foo")));
+        Map<String, Object> s = newMap();
+        assertThrows(JsonPathException.class, () -> new MapAccessor.Updater("foo.foo.foo")); // parse error
+        assertThrows(JsonPathException.class, () -> new MapAccessor.Updater("$foo")); // parse error
+        assertThrows(JsonPathException.class, () -> new MapAccessor.Updater("$.struct[0]").run(s, Collections.singletonMap("$.struct[0]", "foo")));
+        assertThrows(JsonPathException.class, () -> new MapAccessor.Updater("$.struct.string_array.foo").run(s, Collections.singletonMap("$.struct.string_array.foo", "foo")));
     }
 }
