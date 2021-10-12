@@ -1,10 +1,12 @@
 plugins {
   id 'java-library'
-  id 'com.github.johnrengelman.shadow' version '7.0.0'
+  id 'maven-publish'
+  id 'signing'
 }
 
 group = "io.github.rerorero"
 version = "0.1.0"
+archivesBaseName = "kafka-connect-jsonpath-accessor"
 
 ext {
   kafkaVersion = "2.8.0"
@@ -34,3 +36,64 @@ java {
 test {
   useJUnitPlatform()
 }
+
+sourceSets {
+  main.java.srcDirs = ["src/main/java"]
+}
+
+publishing {
+  publications {
+    mavenJava(MavenPublication) {
+      artifactId = 'kafka-connect-jsonpath-accessor'
+      from components.java
+      versionMapping {
+        usage('java-api') {
+          fromResolutionOf('runtimeClasspath')
+        }
+        usage('java-runtime') {
+          fromResolutionResult()
+        }
+      }
+
+      pom {
+        name = 'kafka-connect-jsonpath-accessor'
+        description = 'A lirbary enables to access Kafka connect data with Json Path expression.'
+        url = 'https://github.com/rerorero/kafka-connect-jsonpath-accessor/'
+        licenses {
+          license {
+            name = 'The Apache License, Version 2.0'
+            url = 'http://www.apache.org/licenses/LICENSE-2.0.txt'
+          }
+        }
+        developers {
+          developer {
+            id = 'rerorero'
+            name = 'rero rero'
+            email = 'nato9598@hotmail.co.jp'
+          }
+        }
+        scm {
+          connection = 'scm:git:git://github.com:rerorero/kafka-connect-jsonpath-accessor.git'
+          developerConnection = 'scm:git:ssh://github.com:rerorero/kafka-connect-jsonpath-accessor.git'
+          url = 'https://github.com/rerorero/kafka-connect-jsonpath-accessor/tree/main'
+        }
+      }
+
+      repositories {
+        maven {
+          name = "OSSRH"
+          url = version.endsWith('SNAPSHOT') ? "https://s01.oss.sonatype.org/content/repositories/snapshots/" : "https://s01.oss.sonatype.org/service/local/staging/deploy/maven2/"
+          credentials {
+            username = System.getenv("MAVEN_USERNAME")
+            password = System.getenv("MAVEN_PASSWORD")
+          }
+        }
+      }
+    }
+  }
+}
+
+signing {
+    sign publishing.publications.mavenJava
+}
+
