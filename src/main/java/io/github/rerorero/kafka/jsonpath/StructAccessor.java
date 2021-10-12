@@ -25,7 +25,6 @@ public class StructAccessor extends AccessorBase {
          * task runner to retrieve values from the passed Map according to the json path.
          *
          * @param jsonPath JsonPath string
-         * @return a new task runner to retrieve the values from a Map
          */
         public Getter(String jsonPath) {
             this.tasks = parse(jsonPath, getTaskGen);
@@ -52,7 +51,6 @@ public class StructAccessor extends AccessorBase {
          * task runner to update the given Map according to the json path.
          *
          * @param jsonPath JsonPath string
-         * @return a new task runner to update the values in a Map
          */
         public Updater(String jsonPath) {
             this.tasks = parse(jsonPath, updateTaskGen);
