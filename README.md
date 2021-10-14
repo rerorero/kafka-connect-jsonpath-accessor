@@ -1,15 +1,19 @@
 # kafka-connect-jsonpath-accessor
+
 A library enables to access Kafka connect data with Json Path expression.
 You can access Kafka connect data using expressions such as JSON Path `$.name`.
 
-This library is intended to help data manipulation in Kafka connect or SMT application.
+This library is intended to help data manipulation in Kafka connect and SMT application.
 The currently supported connect data types are `org.apache.kafka.connect.data.Struct` and `Map<String, Object>`.
 
 ## Getting started
+
 Select latest version from [the maven repository](https://mvnrepository.com/artifact/io.github.rerorero/kafka-connect-jsonpath-accessor).
 
 ## Usage
+
 Example Code
+
 ```java
 HashMap<String, Object> data = new HashMap<>();
 data.put("users", Arrays.asList(
@@ -44,6 +48,11 @@ Map<String, Object> updated = updater.run(data, new HashMap<String, Object>(){{
 System.out.println(updated);
 // {users=[{name=Ultimate Guy}, {name=Incredible Guy}, {name=Practical Guy}]}
 ```
+
+| Class                                                               | Kafka Connect Type                     |
+| ------------------------------------------------------------------- | -------------------------------------- |
+| `io.github.rerorero.kafka.jsonpath.StructAccessor.Getter/Updater` | `org.apache.kafka.connect.data.Struct` |
+| `io.github.rerorero.kafka.jsonpath.MapAccessor.Getter/Updater`    | `Map<String, Object>`                  |
 
 ## Json Path Expressions
 
