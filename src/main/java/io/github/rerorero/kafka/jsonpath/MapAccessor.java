@@ -67,7 +67,21 @@ public class MapAccessor extends AccessorBase {
             if (valueToUpdate.isEmpty()) {
                 return updated;
             }
-            final UpdateTaskState state = new UpdateTaskState(updated, valueToUpdate);
+            final UpdateTaskState state = new SelectableUpdateTaskState(updated, valueToUpdate);
+            runTasks(state, tasks);
+            return updated;
+        }
+
+        /**
+         * Run the tasks generated from JsonPath and create a new Object with updated value.
+         *
+         * @param org           Original Object value
+         * @param valueToUpdate value to update
+         * @return a new Object instance with the passed valueToUpdate applied.
+         */
+        public Map<String, Object> run(Map<String, Object> org, Object valueToUpdate) {
+            final Map<String, Object> updated = copyMap(org);
+            final UpdateTaskState state = new SimpleUpdateTaskState(updated, valueToUpdate);
             runTasks(state, tasks);
             return updated;
         }
@@ -179,17 +193,41 @@ public class MapAccessor extends AccessorBase {
         }
     }
 
-    private static class UpdateTaskState {
-        private final Map<String, Object> newValue;
+    private static abstract class UpdateTaskState {
         Map<String, Object> pathMap;
 
-        UpdateTaskState(Map<String, Object> org, Map<String, Object> newValue) {
-            this.newValue = newValue;
+        UpdateTaskState(Map<String, Object> org) {
             this.pathMap = Collections.singletonMap("$", org);
         }
 
+        abstract Object getNewValue(String path);
+    }
+
+    private static class SelectableUpdateTaskState extends UpdateTaskState {
+        private final Map<String, Object> newValue;
+
+        SelectableUpdateTaskState(Map<String, Object> org, Map<String, Object> newValue) {
+            super(org);
+            this.newValue = newValue;
+        }
+
+        @Override
         Object getNewValue(String path) {
             return newValue.get(path);
+        }
+    }
+
+    private static class SimpleUpdateTaskState extends UpdateTaskState {
+        private final Object newValue;
+
+        SimpleUpdateTaskState(Map<String, Object> org, Object newValue) {
+            super(org);
+            this.newValue = newValue;
+        }
+
+        @Override
+        Object getNewValue(String path) {
+            return this.newValue;
         }
     }
 
@@ -198,6 +236,10 @@ public class MapAccessor extends AccessorBase {
         public ParserListener.Task<UpdateTaskState> subscriptObject(String keyName) {
             return state ->
                     state.pathMap = mapObjectSubscript(state.pathMap, keyName, param -> {
+                        Object child = param.parent.get(param.key);
+                        if (child instanceof Map || child instanceof List || child == null) {
+                            return child;
+                        }
                         // if path is found in newValue, modify the Map in the state
                         // otherwise just get the field and return it.
                         final Object newVal = state.getNewValue(param.path);
@@ -205,7 +247,7 @@ public class MapAccessor extends AccessorBase {
                             param.parent.put(param.key, newVal);
                             return newVal;
                         } else {
-                            return param.parent.get(param.key);
+                            return child;
                         }
                     });
         }
@@ -214,12 +256,16 @@ public class MapAccessor extends AccessorBase {
         public ParserListener.Task<UpdateTaskState> subscriptArray(int index) {
             return state ->
                     state.pathMap = mapSubscriptArray(state.pathMap, index, param -> {
+                        Object child = param.parent.get(param.index);
+                        if (child instanceof Map || child instanceof List) {
+                            return child;
+                        }
                         final Object newVal = state.getNewValue(param.path);
                         if (newVal != null) {
                             param.parent.set(param.index, newVal);
                             return newVal;
                         } else {
-                            return param.parent.get(param.index);
+                            return child;
                         }
                     });
         }
