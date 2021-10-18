@@ -15,42 +15,51 @@ Select latest version from [the maven repository](https://mvnrepository.com/arti
 Example Code
 
 ```java
-HashMap<String, Object> data = new HashMap<>();
-data.put("users", Arrays.asList(
-        new HashMap<String, Object>() {{
-            put("name", "Fifer");
-        }},
-        new HashMap<String, Object>() {{
-            put("name", "Fiddler");
-        }},
-        new HashMap<String, Object>() {{
-            put("name", "Practical Guy");
-        }}
-));
+        // This example retrieves and updates values in Map<String, Object>
+        // The library also supports org.apache.kafka.connect.data.Struct.
+        HashMap<String, Object> data = new HashMap<>();
+        data.put("users", Arrays.asList(
+                new HashMap<String, Object>() {{
+                    put("name", "Fifer");
+                }},
+                new HashMap<String, Object>() {{
+                    put("name", "Fiddler");
+                }},
+                new HashMap<String, Object>() {{
+                    put("name", "Practical Guy");
+                }}
+        ));
 
-// Getter/Updater instance is stateless. You can call `run` against different data
-MapAccessor.Getter getter = new MapAccessor.Getter("$.users[*].name");
+        // Getter/Updater instance is stateless. You can call `run` against different data
+        MapAccessor.Getter getter = new MapAccessor.Getter("$.users[*].name");
 
-Map<String, Object> values = getter.run(data);
+        Map<String, Object> values = getter.run(data);
+        values.forEach((k, v) -> System.out.println((k + ":" + v)));
+        // Getter.run() returns the pairs of the json path and value.
+        // $.users[0].name:Fifer
+        // $.users[1].name:Fiddler
+        // $.users[2].name:Practical Guy
 
-values.forEach((k, v) -> System.out.println((k + ":" + v)));
-// $.users[0].name:Fifer
-// $.users[1].name:Fiddler
-// $.users[2].name:Practical Guy
+        MapAccessor.Updater updater = new MapAccessor.Updater("$.users[*].name");
 
+        // If you want to change the value for each path individually, you can pass the json path and the pair of values to be updated.
+        // This interface is useful for re-writing the individually transformed values for the results obtained using Getter,
+        // because Getter.run() returns the pairs of json path and original value.
+        Map<String, Object> updated = updater.run(data, new HashMap<String, Object>() {{
+            put("$.users[0].name", "Ultimate Guy");
+            put("$.users[1].name", "Incredible Guy");
+        }});
+        System.out.println(updated);
+        // {users=[{name=Ultimate Guy}, {name=Incredible Guy}, {name=Practical Guy}]}
 
-MapAccessor.Updater updater = new MapAccessor.Updater("$.users[*].name");
-Map<String, Object> updated = updater.run(data, new HashMap<String, Object>(){{
-    put("$.users[0].name", "Ultimate Guy");
-    put("$.users[1].name", "Incredible Guy");
-}});
-
-System.out.println(updated);
-// {users=[{name=Ultimate Guy}, {name=Incredible Guy}, {name=Practical Guy}]}
+        // Or if you want to simply update all values matched with the json path to the same value, you can do like this:
+        updated = updater.run(data, "Wolf!");
+        System.out.println(updated);
+        // {users=[{name=Wolf!}, {name=Wolf!}, {name=Wolf!}]}
 ```
 
-| Class                                                               | Kafka Connect Type                     |
-| ------------------------------------------------------------------- | -------------------------------------- |
+| Class                                                             | Kafka Connect Type                     |
+| ----------------------------------------------------------------- | -------------------------------------- |
 | `io.github.rerorero.kafka.jsonpath.StructAccessor.Getter/Updater` | `org.apache.kafka.connect.data.Struct` |
 | `io.github.rerorero.kafka.jsonpath.MapAccessor.Getter/Updater`    | `Map<String, Object>`                  |
 

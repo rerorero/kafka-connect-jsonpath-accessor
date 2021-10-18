@@ -212,6 +212,64 @@ class StructAccessorTest {
         assertEquals(expected, updater.run(org, newValue)); // Updater should be idempotent
     }
 
+    private static Stream<Arguments> testSimpleUpdateTaskArguments() {
+        List<Arguments> args = new ArrayList<>();
+
+        args.add(Arguments.of("$.text", "updated!", newStruct().put("text", "updated!")));
+
+        args.add(Arguments.of("$['text']", "updated!", newStruct().put("text", "updated!")));
+
+        {
+            Struct expected = newStruct();
+            expected.getStruct("struct").put("sub_text", "updated!");
+            args.add(Arguments.of("$.struct.sub_text", "updated!", expected));
+        }
+        {
+            Struct expected = newStruct();
+            expected.getStruct("struct").getArray("string_array").set(1, "updated!");
+            args.add(Arguments.of("$['struct']['string_array'][1]", "updated!", expected));
+        }
+        {
+            Struct expected = newStruct();
+            List<String> arr = expected.getStruct("struct").getArray("string_array");
+            arr.set(0, "updated!");
+            arr.set(1, "updated!");
+            arr.set(2, "updated!");
+            args.add(Arguments.of("$.struct.string_array[*]", "updated!", expected));
+        }
+        {
+            Struct expected = newStruct();
+            ((Struct) expected.getStruct("struct").getArray("struct_array").get(2)).put("string_element", "updated!");
+            args.add(Arguments.of("$.struct.struct_array[2].string_element", "updated!", expected));
+        }
+        {
+            Struct expected = newStruct();
+            List<Struct> arr = expected.getStruct("struct").getArray("struct_array");
+            arr.get(0).put("string_element", "updated!");
+            arr.get(1).put("string_element", "updated!");
+            arr.get(2).put("string_element", "updated!");
+            args.add(Arguments.of("$['struct']['struct_array'][*]['string_element']", "updated!", expected));
+        }
+
+        // missing field should be skipped without error.
+        args.add(Arguments.of("$.unknown", "updated!", newStruct()));
+        args.add(Arguments.of("$.struct['unknown'].foo", "updated", newStruct()));
+
+        return Stream.of(args.toArray(args.toArray(new Arguments[0])));
+    }
+
+    @ParameterizedTest
+    @MethodSource("testSimpleUpdateTaskArguments")
+    public void testSimpleUpdateTask(String jsonPath, Object newValue, Struct expected) {
+        Struct org = newStruct();
+        StructAccessor.Updater updater = new StructAccessor.Updater(jsonPath);
+        Struct actual = updater.run(org, newValue);
+        assertEquals(expected, actual);
+        assertEquals(org, newStruct()); // source struct should not be modified
+
+        assertEquals(expected, updater.run(org, newValue)); // Updater should be idempotent
+    }
+
     @Test
     public void testUpdateTaskBinary() {
         Struct expected = newStruct();

@@ -210,6 +210,76 @@ class MapAccessorTest {
         assertEquals(expected, updater.run(org, newValue)); // Updater should be idempotent
     }
 
+    private static Stream<Arguments> testSimpleUpdateTaskArguments() {
+        List<Arguments> args = new ArrayList<>();
+
+        {
+            Map<String, Object> expected = newMap();
+            expected.put("text", "updated!");
+            args.add(Arguments.of("$.text", "updated!", expected));
+        }
+        {
+            Map<String, Object> expected = newMap();
+            expected.put("text", "updated!");
+            args.add(Arguments.of("$['text']", "updated!", expected));
+        }
+
+        {
+            Map<String, Object> expected = newMap();
+            ((Map<String, Object>) expected.get("struct")).put("sub_text", "updated!");
+            args.add(Arguments.of("$.struct.sub_text", "updated!", expected));
+        }
+        {
+            Map<String, Object> expected = newMap();
+            Map<String, Object> struct = (Map<String, Object>) expected.get("struct");
+            ((List<String>) struct.get("string_array")).set(1, "updated!");
+            args.add(Arguments.of("$['struct']['string_array'][1]", "updated!", expected));
+        }
+        {
+            Map<String, Object> expected = newMap();
+            Map<String, Object> struct = (Map<String, Object>) expected.get("struct");
+            List<String> arr = (List<String>) struct.get("string_array");
+            arr.set(0, "updated!");
+            arr.set(1, "updated!");
+            arr.set(2, "updated!");
+            args.add(Arguments.of("$.struct.string_array[*]", "updated!", expected));
+        }
+        {
+            Map<String, Object> expected = newMap();
+            Map<String, Object> struct = (Map<String, Object>) expected.get("struct");
+            List<Map<String, Object>> arr = (List<Map<String, Object>>) struct.get("struct_array");
+            arr.get(2).put("string_element", "updated!");
+            args.add(Arguments.of("$.struct.struct_array[2].string_element", "updated!", expected));
+        }
+        {
+            Map<String, Object> expected = newMap();
+            Map<String, Object> struct = (Map<String, Object>) expected.get("struct");
+            List<Map<String, Object>> arr = (List<Map<String, Object>>) struct.get("struct_array");
+            arr.get(0).put("string_element", "updated!");
+            arr.get(1).put("string_element", "updated!");
+            arr.get(2).put("string_element", "updated!");
+            args.add(Arguments.of("$['struct']['struct_array'][*]['string_element']", "updated!", expected));
+        }
+
+        // missing field should be pass
+        args.add(Arguments.of("$.unknown", "updated!", newMap()));
+        args.add(Arguments.of("$.struct['unknown'].foo", "updated!", newMap()));
+
+        return Stream.of(args.toArray(args.toArray(new Arguments[0])));
+    }
+
+    @ParameterizedTest
+    @MethodSource("testSimpleUpdateTaskArguments")
+    public void testSimpleUpdateTask(String jsonPath, Object newValue, Map<String, Object> expected) {
+        Map<String, Object> org = newMap();
+        MapAccessor.Updater updater = new MapAccessor.Updater(jsonPath);
+        Map<String, Object> actual = updater.run(org, newValue);
+        assertEquals(expected, actual);
+        assertEquals(org, newMap()); // source struct should not be modified
+
+        assertEquals(expected, updater.run(org, newValue)); // Updater should be idempotent
+    }
+
     @Test
     public void testUpdateTaskBinary() {
         Map<String, Object> expected = newMap();

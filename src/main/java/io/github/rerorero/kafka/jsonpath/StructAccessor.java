@@ -68,7 +68,21 @@ public class StructAccessor extends AccessorBase {
             if (valueToUpdate.isEmpty()) {
                 return updated;
             }
-            final UpdateTaskState state = new UpdateTaskState(updated, valueToUpdate);
+            final UpdateTaskState state = new SelectableUpdateTaskState(updated, valueToUpdate);
+            runTasks(state, tasks);
+            return updated;
+        }
+
+        /**
+         * Run the tasks generated from JsonPath and create a new Struct with updated value.
+         *
+         * @param org           Original Struct value
+         * @param valueToUpdate value to update
+         * @return a new Struct instance with the passed valueToUpdate applied.
+         */
+        public Struct run(Struct org, Object valueToUpdate) {
+            final Struct updated = copyStruct(org);
+            final UpdateTaskState state = new SimpleUpdateTaskState(updated, valueToUpdate);
             runTasks(state, tasks);
             return updated;
         }
@@ -191,17 +205,41 @@ public class StructAccessor extends AccessorBase {
         }
     }
 
-    private static class UpdateTaskState {
-        private final Map<String, Object> newValue;
+    private static abstract class UpdateTaskState {
         Map<String, Object> pathMap;
 
-        UpdateTaskState(Struct org, Map<String, Object> newValue) {
-            this.newValue = newValue;
+        UpdateTaskState(Struct org) {
             this.pathMap = Collections.singletonMap("$", org);
         }
 
+        abstract Object getNewValue(String path);
+    }
+
+    private static class SelectableUpdateTaskState extends UpdateTaskState {
+        private final Map<String, Object> newValue;
+
+        SelectableUpdateTaskState(Struct org, Map<String, Object> newValue) {
+            super(org);
+            this.newValue = newValue;
+        }
+
+        @Override
         Object getNewValue(String path) {
             return newValue.get(path);
+        }
+    }
+
+    private static class SimpleUpdateTaskState extends UpdateTaskState {
+        private final Object newValue;
+
+        SimpleUpdateTaskState(Struct org, Object newValue) {
+            super(org);
+            this.newValue = newValue;
+        }
+
+        @Override
+        Object getNewValue(String path) {
+            return this.newValue;
         }
     }
 
@@ -211,6 +249,10 @@ public class StructAccessor extends AccessorBase {
         public ParserListener.Task<UpdateTaskState> subscriptObject(String keyName) {
             return state ->
                     state.pathMap = mapObjectSubscript(state.pathMap, keyName, param -> {
+                        Object child = param.parent.get(param.key);
+                        if (child instanceof Struct || child instanceof List || child == null) {
+                            return child;
+                        }
                         // if path is found in newValue, modify the Struct in the state
                         // otherwise just get the field and return it.
                         final Object newVal = state.getNewValue(param.path);
@@ -227,6 +269,10 @@ public class StructAccessor extends AccessorBase {
         public ParserListener.Task<UpdateTaskState> subscriptArray(int index) {
             return state ->
                     state.pathMap = mapSubscriptArray(state.pathMap, index, param -> {
+                        Object child = param.parent.get(param.index);
+                        if (child instanceof Struct || child instanceof List) {
+                            return child;
+                        }
                         final Object newVal = state.getNewValue(param.path);
                         if (newVal != null) {
                             param.parent.set(param.index, newVal);
