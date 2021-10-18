@@ -42,7 +42,7 @@ Example Code
 
         MapAccessor.Updater updater = new MapAccessor.Updater("$.users[*].name");
 
-        // If you want to change the value for each path individually, you can pass the json path and the pair of values to be updated.
+        // If you want to change the value for each path individually, you can pass the pair of json path and values to be updated.
         // This interface is useful for re-writing the individually transformed values for the results obtained using Getter,
         // because Getter.run() returns the pairs of json path and original value.
         Map<String, Object> updated = updater.run(data, new HashMap<String, Object>() {{
